@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗报告查看系统</title>
+    <style>
+        /* 保持原有样式不变，新增调试信息样式 */
+        .debug-info {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 1000;
+        }
+        .thumbnail-container {
+            overflow-y: auto;
+            height: 300px; /* 根据需求调整高度 */
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .thumbnail-item {
+            width: 80px; /* 缩略图宽度 */
+            height: 100px; /* 缩略图高度 */
+            object-fit: cover;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- 保持原有HTML结构不变 -->
+
+    <script>
+        // 状态管理对象
+        let appState = {
+            currentReport: {
+                reqid: null,
+                totalPages: 0,
+                baseUrl: null,
+                lastUpdated: null
+            },
+            currentPage: 1,
+            debugMode: true // 调试模式开关
+        };
+
+        // 调试信息显示
+        function updateDebugInfo() {
+            if (!appState.debugMode) return;
+            
+            const debugDiv = document.getElementById('debugInfo') || createDebugElement();
+            debugDiv.innerHTML = `
+                当前状态：
+                ReqID: ${appState.currentReport.reqid || '未加载'}
+                总页数: ${appState.currentReport.totalPages}
+                当前页: ${appState.currentPage}
+                最后更新: ${appState.currentReport.lastUpdated || 'N/A'}
+            `;
+        }
+
+        function createDebugElement() {
+            const div = document.createElement('div');
+            div.id = 'debugInfo';
+            div.className = 'debug-info';
+            document.body.appendChild(div);
+            return div;
+        }
+
+        // 强化版图片加载
+        async function loadImageWithRetry(url, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const blob = await response.blob();
+                    return URL.createObjectURL(blob);
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        // 更新图片显示（核心修复）
+        async function updateImageView() {
+            const viewer = document.getElementById('imageCard');
+            const loading = document.getElementById('loadingOverlay');
+            
+            try {
+                // 显示加载状态
+                loading.style.display = 'flex';
+                viewer.innerHTML = '';
+
+                // 构建带时间戳的请求URL
+                const timestamp = Date.now();
+                const imageUrl = `${appState.currentReport.baseUrl}&page=${appState.currentPage}&_=${timestamp}`;
+                
+                if (appState.debugMode) {
+                    console.log('[DEBUG] 请求图片URL:', imageUrl);
+                }
+
+                // 加载图片
+                const imageSrc = await loadImageWithRetry(imageUrl);
+                
+                // 创建图片元素
+                const img = new Image();
+                img.src = imageSrc;
+                img.alt = `报告第${appState.currentPage}页`;
+                img.onload = () => {
+                    // 图片预加载完成后再插入DOM
+                    viewer.innerHTML = '';
+                    viewer.appendChild(img);
+                    loading.style.display = 'none';
+                    updateThumbnails();
+                    updateDebugInfo();
+                };
+
+                // 处理图片加载错误
+                img.onerror = () => {
+                    throw new Error('图片加载失败');
+                };
+
+            } catch (error) {
+                loading.style.display = 'none';
+                viewer.innerHTML = `<div class="error">${error.message}</div>`;
+                console.error('图片加载错误:', error);
+            }
+        }
+
+        // 强化版报告加载
+        async function loadReport() {
+            const recordid = document.getElementById('recordid').value.trim();
+            
+            try {
+                // 验证输入
+                if (!/^P\d{8}\d{3}$/.test(recordid)) {
+                    throw new Error('病历编号格式错误，示例：P20240315001');
+                }
+
+                // 显示加载状态
+                showLoadingState('正在加载报告...');
+
+                // 并行请求数据
+                const [reportData, pageData] = await Promise.all([
+                    fetch(`/api/reports?recordid=${recordid}`).then(handleResponse),
+                    fetch(`/api/page-count?reqid=${recordid}`).then(handleResponse)
+                ]);
+
+                // 更新应用状态
+                appState.currentReport = {
+                    reqid: reportData.reqid,
+                    totalPages: pageData.total_pages,
+                    baseUrl: `/report/jpg?reqid=${reportData.reqid}`,
+                    lastUpdated: pageData.last_update
+                };
+                appState.currentPage = 1;
+
+                // 更新界面
+                updateUIComponents();
+                await Promise.all([updateImageView(), updateThumbnails()]);
+                
+                // 更新历史记录
+                history.replaceState(null, '', `?recordid=${recordid}`);
+                showStatus(`报告加载成功，共${appState.currentReport.totalPages}页`);
+
+            } catch (error) {
+                handleLoadingError(error);
+            } finally {
+                updateDebugInfo();
+            }
+        }
+
+        // 辅助函数
+        async function handleResponse(response) {
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || '请求失败');
+            }
+            return response.json();
+        }
+
+        function showLoadingState(message) {
+            document.getElementById('status').textContent = message;
+            document.getElementById('controls').style.display = 'none';
+            document.getElementById('viewerContainer').style.display = 'none';
+        }
+
+        function updateUIComponents() {
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('viewerContainer').style.display = 'block';
+            document.getElementById('refreshBtn').disabled = false;
+        }
+
+        function handleLoadingError(error) {
+            showError(error.message);
+            document.getElementById('controls').style.display = 'none';
+            document.getElementById('viewerContainer').style.display = 'none';
+            appState.currentReport = { reqid: null, totalPages: 0 };
+        }
+
+        // 翻页控制（关键修改）
+        function changePage(step) {
+            const newPage = appState.currentPage + step;
+            
+            if (newPage < 1 || newPage > appState.currentReport.totalPages) {
+                showError(`无效页码: ${newPage}`);
+                return;
+            }
+
+            appState.currentPage = newPage;
+            updateImageView();
+            updateDebugInfo();
+        }
+
+        // 缩略图导航
+        function updateThumbnails() {
+            const container = document.getElementById('thumbnailContainer');
+            container.innerHTML = '';
+
+            for (let i = 1; i <= appState.currentReport.totalPages; i++) {
+                const thumb = document.createElement('div');
+                thumb.className = `thumbnail-item ${i === appState.currentPage ? 'active' : ''}`;
+                thumb.innerHTML = `
+                    <img src="${appState.currentReport.baseUrl}&page=${i}&thumbnail=true&_=${Date.now()}" 
+                         alt="第${i}页"
+                         onclick="jumpToPage(${i})"
+                         loading="lazy">
+                `;
+                container.appendChild(thumb);
+            }
+        }
+
+        // 页面跳转
+        function jumpToPage(page) {
+            if (page >= 1 && page <= appState.currentReport.totalPages) {
+                appState.currentPage = page;
+                updateImageView();
+                updateThumbnails();
+                updateDebugInfo();
+            }
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(location.search);
+            if (urlParams.has('recordid')) {
+                document.getElementById('recordid').value = urlParams.get('recordid');
+                loadReport();
+            }
+            updateDebugInfo();
+        });
+
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') changePage(-1);
+            if (e.key === 'ArrowRight') changePage(1);
+        });
+    </script>
+</body>
+</html>
