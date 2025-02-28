@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗报告查看系统</title>
+    <style>
+        /* Basic styles to mimic a PDF viewer */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            text-align: center;
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            background-image: url(about:blank);
+            background-attachment: fixed;
+        }
+
+        .pdf-container {
+            display: block;
+            max-height: 100vh;
+            width: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            width: expression(eval(document.documentElement.clientWidth-150));
+            margin-left: 150px;
+        }
+
+        .page {
+            display: inline-block;
+            width: 80%;
+            overflow: hidden;
+            height: auto;
+            border: 1px solid #ccc;
+            margin: 10px auto;
+            background-color: white;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        /* Page image styles */
+        .page img {
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+
+        /* Controls at the bottom */
+        .controls {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            /* background-color: rgba(0, 0, 0, 0.5);*/
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: block;
+            opacity: 0.5;
+            transition: opacity 0.3s ease-in-out;
+            position: absolute;
+            bottom: auto;
+            top: expression(eval(document.documentElement.scrollTop+document.documentElement.clientHeight-this.offsetHeight-(parseInt(this.currentStyle.marginTop, 10)||0)-(parseInt(this.currentStyle.marginBottom, 10)||0)));
+            margin-left: -105px;
+        }
+
+        /* Hover effect to make the controls fully visible */
+        .controls:hover {
+            opacity: 1;
+        }
+
+        .controls button {
+            background-color: #444;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            width: 80px;
+        }
+
+        .controls button:hover {
+            background-color: #555;
+        }
+
+        .sidebar {
+            width: 150px;
+            color: white;
+            padding: 10px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            height: 100%;
+            box-sizing: border-box;
+            max-height: 100vh;
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: expression(eval(document.documentElement.clientHeight));
+        }
+
+        /* Thumbnail styling */
+        .thumbnail {
+            cursor: pointer;
+            margin: 0px auto;
+            margin-bottom: 5px;
+            border: 3px solid transparent;
+            border-radius: 2px;
+        }
+
+        .thumbnail:hover {
+            border-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .thumbnail.active {
+            border-color: rgb(63, 131, 189);
+        }
+
+        .thumbnail img {
+            display: block;
+            width: 100%;
+            height: auto;
+            opacity: 0.9;
+            box-shadow: 0 0 #0000, 0 0 #0000, 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 保持原有HTML结构不变 -->
+    <div class="sidebar" id="sidebar">
+        {% for item in items %}
+        <div class="thumbnail" onclick="showPage({{ loop.index - 1}})">
+            <img src="/img/{{item}}?t={{time}}" alt="Thumbnail {{ loop.index }}" />
+        </div>
+        {% endfor %}
+    </div>
+    <div class="pdf-container" id="pdfContainer">
+        {% for item in items %}
+        <div class="page"><img src="/img/{{item}}?t={{time}}" alt="Page {{ loop.index }}" /></div>
+        {% endfor %}
+    </div>
+    <div class="controls">
+        <button onclick="prevPage()">上一页</button>
+        <button onclick="nextPage()" style="margin-left: 10px;">下一页</button>
+    </div>
+    <script type="text/javascript">
+        function getElementsByClassName(className) {
+            var found = [];
+            var elements = document.getElementsByTagName("*");
+            for (var i = 0; i < elements.length; i++) {
+                var names = elements[i].className.split(' ');
+                for (var j = 0; j < names.length; j++) {
+                    if (names[j] == className) found.push(elements[i]);
+                }
+            }
+            return found;
+        }
+        // Simple pagination in JavaScript for basic functionality
+        //alert(document.getElementsByClassName("pdf-container").length)
+        //document.getElementsByClassName("pdf-container")[0].style = "width:" + document.documentElement.clientWidth + 'px';
+
+        var currentPage = 0;
+        var pdfContainer = document.getElementById('pdfContainer');
+        var pages = getElementsByClassName('page');
+        var thumbnails = getElementsByClassName('thumbnail');
+        var totalPages = pages.length;
+
+        function showPage(pageIndex) {
+            for (var i = 0; i < totalPages; i++) {
+                pages[i].style.display = 'none';
+                thumbnails[i].className = 'thumbnail'
+            }
+
+            pages[pageIndex].style.display = 'inline-block';
+            thumbnails[pageIndex].className = 'thumbnail active';
+            window.scroll(0, 0);
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+            }
+            showPage(currentPage);
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+            }
+            showPage(currentPage);
+        }
+
+        showPage(currentPage);
+    </script>
+</body>
+
+</html>

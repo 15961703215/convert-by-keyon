@@ -32,7 +32,7 @@ def convert_job():
 
             for item in items:
                 (rid, record_id, anauploaddate, reviewuploaddate) = item
-                print(f"start process {record_id}")
+                # print(f"start process {record_id}")
                 ana_pdf_path = os.path.join(
                     WATCH_FOLDER, f"{record_id}_anareport.pdf")
                 review_pdf_path = os.path.join(
@@ -60,9 +60,11 @@ def convert_job():
                         """, (t, ana_list, review_list, rid))
                     print(
                         f"update {record_id}, ana: {ana_list}, review: {review_list}")
-            print("done schedule job")
+            # print("done schedule job")
         except Exception as e:
             print(f"schedule job failed: {str(e)}")
+
+    time.sleep(1)
 
 
 def run_schedule():
@@ -84,8 +86,8 @@ def start_schedule():
 def index():
     reqid = request.args.get('reqid')
     type = request.args.get('type')
-    if reqid is None:
-        return redirect("/?reqid=测试的-0-0000&type=reviewreport")
+    # if reqid is None:
+    #     return redirect("/?reqid=测试的-0-0000&type=reviewreport")
     (imgupdate, anaimglist, reviewimglist) = db_query_one("""
         select r.imgupdate,r.anaimglist, r.reviewimglist from report r where r.reqid = %s
     """, (reqid,))

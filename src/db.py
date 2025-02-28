@@ -15,6 +15,10 @@ class _QueryType(Enum):
     ALL = 2   # 获取所有结果 (findAll)
 
 
+pool = mysql.connector.pooling.MySQLConnectionPool(
+    pool_name="convert", pool_size=3, pool_reset_session=True, **DB_CONFIG)
+
+
 def _execute(query, params=None, results=_QueryType.NONE):
     """
     执行带有参数的 SQL 查询，并根据指定的类型返回结果。
@@ -30,19 +34,26 @@ def _execute(query, params=None, results=_QueryType.NONE):
              - _QueryType.ALL: 返回所有结果（元组列表或空列表）。
              - _QueryType.NONE: 返回 None（提交操作后不返回结果）。
     """
-    # 使用提供的配置建立数据库连接
-    with mysql.connector.connect(**DB_CONFIG) as conn:
-        with conn.cursor() as cursor:
-            # 执行查询并传递参数
-            cursor.execute(query, params)
+    try:
+        # 使用提供的配置建立数据库连接
+        conn = pool.get_connection()
+        cursor = conn.cursor()
 
-            # 根据 'results' 参数返回不同的查询结果
-            if results is _QueryType.ONE:
-                return cursor.fetchone()  # 获取单个结果
-            if results is _QueryType.ALL:
-                return cursor.fetchall()  # 获取所有结果
-            conn.commit()  # 如果不需要结果，则提交事务
-            return None  # 如果没有需要的结果，则返回 None
+        # 执行查询并传递参数
+        cursor.execute(query, params)
+
+        # 根据 'results' 参数返回不同的查询结果
+        if results is _QueryType.ONE:
+            return cursor.fetchone()  # 获取单个结果
+        if results is _QueryType.ALL:
+            return cursor.fetchall()  # 获取所有结果
+        conn.commit()  # 如果不需要结果，则提交事务
+
+        return None  # 如果没有需要的结果，则返回 None
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def db_execute(query, params=None):
@@ -105,4 +116,14 @@ def db_query_one(query, params=None):
 
 
 # if __name__ == '__main__':
-#     init_db()
+#     while (True):
+#         a = db_query_all("""
+#                 select r._id, p.recordid, p.anauploaddate, p.reviewuploaddate from patient p left join report r on p.reqid = r.reqid
+#                 where
+#                 (p.anauploaddate is not null and (r.imgupdate is null or p.anauploaddate > r.imgupdate) ) or
+#                 (p.reviewuploaddate is not null and (r.imgupdate is null or p.reviewuploaddate  > r.imgupdate))
+#                 limit 10
+#             """)
+#         print(a)
+#         time.sleep(1)
+#     # time.sleep(1000)
